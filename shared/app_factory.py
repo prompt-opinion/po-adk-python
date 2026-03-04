@@ -48,6 +48,7 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentExtension,
+    AgentSkill,
     APIKeySecurityScheme,
     In,
     SecurityScheme,
@@ -66,6 +67,7 @@ def create_a2a_app(
     version: str = "1.0.0",
     fhir_extension_uri: str | None = None,
     require_api_key: bool = True,
+    skills: list[AgentSkill] | None = None,
 ):
     """
     Build and return an A2A ASGI application for the given ADK agent.
@@ -133,7 +135,7 @@ def create_a2a_app(
             stateTransitionHistory=True,
             extensions=extensions,
         ),
-        skills=[],
+        skills=skills or [],
         securitySchemes=security_schemes,
         security=security,
     )

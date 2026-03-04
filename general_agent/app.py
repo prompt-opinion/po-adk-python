@@ -16,6 +16,7 @@ The agent card is served publicly at:
 """
 import os
 
+from a2a.types import AgentSkill
 from shared.app_factory import create_a2a_app
 
 from .agent import root_agent
@@ -32,4 +33,18 @@ a2a_app = create_a2a_app(
     # No fhir_extension_uri — this agent does not use FHIR context.
     # require_api_key=False — this agent is publicly accessible, no key needed.
     require_api_key=False,
+    skills=[
+        AgentSkill(
+            id="date-time-lookup",
+            name="date-time-lookup",
+            description="Get the current date and time for any given timezone.",
+            tags=["utility", "time"],
+        ),
+        AgentSkill(
+            id="icd-10-lookup",
+            name="icd-10-lookup",
+            description="Look up ICD-10-CM codes and descriptions.",
+            tags=["clinical", "icd10"],
+        ),
+    ],
 )

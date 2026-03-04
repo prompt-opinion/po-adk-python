@@ -11,6 +11,7 @@ All other endpoints require an X-API-Key header (see shared/middleware.py).
 """
 import os
 
+from a2a.types import AgentSkill
 from shared.app_factory import create_a2a_app
 
 from .agent import root_agent
@@ -27,4 +28,30 @@ a2a_app = create_a2a_app(
     # This URI is the key under which callers send FHIR credentials in the
     # A2A message metadata.  Update to match your Prompt Opinion workspace URL.
     fhir_extension_uri="http://localhost:5139/schemas/a2a/v1/fhir-context",
+    skills=[
+        AgentSkill(
+            id="patient-demographics",
+            name="patient-demographics",
+            description="Retrieve patient demographics like name, DOB, and contacts.",
+            tags=["demographics", "fhir"],
+        ),
+        AgentSkill(
+            id="active-medications",
+            name="active-medications",
+            description="Get a list of the patient's active medications and dosages.",
+            tags=["medications", "fhir"],
+        ),
+        AgentSkill(
+            id="active-conditions",
+            name="active-conditions",
+            description="Get the patient's active conditions and diagnoses.",
+            tags=["conditions", "fhir"],
+        ),
+        AgentSkill(
+            id="recent-observations",
+            name="recent-observations",
+            description="Retrieve recent vitals, lab results, and social history.",
+            tags=["observations", "fhir"],
+        ),
+    ],
 )
