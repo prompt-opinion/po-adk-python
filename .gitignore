@@ -47,6 +47,13 @@ nosetests.xml
 *.swo
 *~
 
+# ── Local AI / assistant tooling ───────────────────────────────────────────────
+.codex
+.claude/
+.cursor/
+.windsurf/
+.roo/
+
 # ── ADK session data ────────────────────────────────────────────────────────────
 # Local session state created by `adk web` / `adk run` — never commit
 **/.adk/

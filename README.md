@@ -420,6 +420,9 @@ Copy `.env.example` to `.env` and set values before starting any server.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `GOOGLE_API_KEY` | **Yes** | — | Google AI Studio key for Gemini |
+| `API_KEYS` | No | — | Comma-separated list of valid `X-API-Key` values for authenticated agents, e.g. `key1,key2` |
+| `API_KEY_PRIMARY` | No | — | First named API key slot for authenticated agents |
+| `API_KEY_SECONDARY` | No | — | Second named API key slot for authenticated agents |
 | `PO_PLATFORM_BASE_URL` | No | `http://localhost:5139` | Base URL of your Prompt Opinion workspace. Used to construct the FHIR extension URI in the agent card for `healthcare_agent` and `orchestrator`. Set this to your actual workspace URL (e.g. `https://your-workspace.promptopinion.ai`). |
 | `LOG_FULL_PAYLOAD` | No | `true` | Log full JSON-RPC request body on each request |
 | `LOG_HOOK_RAW_OBJECTS` | No | `false` | Dump raw ADK callback objects — debug only |
@@ -484,27 +487,25 @@ This replaced the previous `SecurityScheme(root=APIKeySecurityScheme(...))` type
 
 ### Updating the allowed keys (authenticated agents only)
 
-Open `shared/middleware.py` and update `VALID_API_KEYS`:
+Configure one or more valid keys in your environment:
 
 ```python
-VALID_API_KEYS: set = {
-    "my-secret-key-123",   # ← replace with your real keys
-    "another-valid-key",
-}
+# Either comma-separated:
+API_KEYS=my-secret-key-123,another-valid-key
+
+# Or named slots:
+API_KEY_PRIMARY=my-secret-key-123
+API_KEY_SECONDARY=another-valid-key
 ```
 
-In production, load from environment variables or a secrets manager:
+The middleware loads both formats automatically, so you can keep the example
+multi-key friendly without storing secrets in source control.
+
+In production, populate those environment variables from a secrets manager:
 
 ```python
-import os
-
-VALID_API_KEYS: set = {
-    k for k in [
-        os.getenv("API_KEY_PRIMARY"),
-        os.getenv("API_KEY_SECONDARY"),
-    ]
-    if k
-}
+# Example: inject API_KEYS or API_KEY_PRIMARY / API_KEY_SECONDARY
+# from Azure Key Vault, AWS Secrets Manager, GCP Secret Manager, etc.
 ```
 
 ### Endpoints (per agent)

@@ -23,11 +23,33 @@ logger = logging.getLogger(__name__)
 
 LOG_FULL_PAYLOAD = os.getenv("LOG_FULL_PAYLOAD", "true").lower() == "true"
 
-# Replace / extend with keys loaded from your environment or secrets store.
-VALID_API_KEYS: set = {
-    "my-secret-key-123",    # your application's key
-    "another-valid-key",    # any other trusted callers
-}
+def _load_valid_api_keys() -> set[str]:
+    """
+    Load allowed API keys from environment variables.
+
+    Supported formats:
+      API_KEYS=my-key-1,my-key-2
+      API_KEY_PRIMARY=my-key-1
+      API_KEY_SECONDARY=my-key-2
+
+    This keeps the example multi-key friendly without shipping usable secrets
+    in source control. In production, populate these values from a secret store.
+    """
+    keys = set()
+
+    raw_keys = os.getenv("API_KEYS", "")
+    if raw_keys:
+        keys.update(k.strip() for k in raw_keys.split(",") if k.strip())
+
+    for env_name in ("API_KEY_PRIMARY", "API_KEY_SECONDARY"):
+        value = os.getenv(env_name, "").strip()
+        if value:
+            keys.add(value)
+
+    return keys
+
+
+VALID_API_KEYS: set[str] = _load_valid_api_keys()
 
 
 class ApiKeyMiddleware(BaseHTTPMiddleware):
