@@ -92,6 +92,29 @@ shared/tools/fhir.py  ──►  FHIR R4 server
 
 ---
 
+## A2A Specification Compatibility
+
+This repo targets **A2A specification v1**, which is the version required by the Prompt Opinion platform.
+
+The Python `a2a-sdk` library (latest: `0.3.x`) has not yet been updated to reflect the v1 schema changes. To bridge the gap, `shared/app_factory.py` includes a pair of thin forward-compatibility subclasses — `AgentCardV1` and `AgentExtensionV1` — that patch three fields the library does not yet expose:
+
+| Field | Change in v1 | How it's handled |
+|---|---|---|
+| `supportedInterfaces` | New — replaces `url` + `preferredTransport` | Added as an explicit Pydantic field on `AgentCardV1` |
+| `securitySchemes` | Schema changed to nested typed-key format (e.g. `apiKeySecurityScheme`) | Overridden to `dict[str, Any]` on `AgentCardV1` so the v1 JSON shape passes through unmodified |
+| `params` on extensions | New — carries SMART scope declarations | Added as an explicit Pydantic field on `AgentExtensionV1` |
+
+The top-level `url` field is still passed to satisfy the current library's Pydantic validation; the same URL is also placed in `supportedInterfaces` for v1 compliance.
+
+**These shims will be removed** once `a2a-sdk` ships native v1 support. Watch for a `⚠ BREAKING CHANGES` entry in the [a2a-python changelog](https://github.com/google-a2a/a2a-python/blob/main/CHANGELOG.md) mentioning `AgentCard` or spec version. At that point:
+1. Delete `AgentExtensionV1` and `AgentCardV1` from `app_factory.py`
+2. Remove `url=url` from the `AgentCardV1(...)` constructor call
+3. Restore the typed `SecurityScheme` constructors if the new library types serialise correctly
+
+Everything else in the repo — agent logic, FHIR tools, middleware, Docker, Cloud Run — is unaffected by this compatibility layer.
+
+---
+
 ## Quick start
 
 ### Prerequisites
