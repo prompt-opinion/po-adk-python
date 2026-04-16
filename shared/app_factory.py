@@ -186,7 +186,7 @@ def create_a2a_app(
         defaultInputModes=["text/plain"],
         defaultOutputModes=["text/plain"],
         capabilities=AgentCapabilities(
-            streaming=True,
+            streaming=False,
             pushNotifications=False,
             stateTransitionHistory=False,  # v1: field kept but must be false
             extensions=extensions,

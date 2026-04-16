@@ -4,7 +4,11 @@
       "WebFetch(domain:google.github.io)",
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(python -c \"from a2a.types import SendStreamingMessageRequest, SendMessageRequest; print\\('streaming:', SendStreamingMessageRequest.model_fields['method'].default\\); print\\('send:', SendMessageRequest.model_fields['method'].default\\)\")",
+      "Bash(.venv/Scripts/python -c \"from a2a.types import SendStreamingMessageRequest, SendMessageRequest; print\\('streaming:', SendStreamingMessageRequest.model_fields['method'].default\\); print\\('send:', SendMessageRequest.model_fields['method'].default\\)\")",
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(.venv/Scripts/pip index:*)"
     ]
   }
 }

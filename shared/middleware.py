@@ -67,17 +67,78 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         body_text  = body_bytes.decode("utf-8", errors="replace")
         parsed     = {}
         try:
-            parsed      = json.loads(body_text) if body_text else {}
-            pretty_body = safe_pretty_json(parsed)
+            parsed = json.loads(body_text) if body_text else {}
         except json.JSONDecodeError:
-            pretty_body = body_text
+            parsed = {}
+
+        # Rewrite legacy PascalCase A2A method names to the current spec names.
+        # Prompt Opinion (and other older clients) send e.g. "SendStreamingMessage"
+        # but the installed a2a-sdk only registers "message/stream" / "message/send".
+        _METHOD_ALIASES: dict[str, str] = {
+            "SendMessage":          "message/send",
+            "SendStreamingMessage": "message/send",   # PO client can't parse SSE; use non-streaming
+            "GetTask":              "tasks/get",
+            "CancelTask":           "tasks/cancel",
+            "TaskResubscribe":      "tasks/resubscribe",
+        }
+        _ROLE_ALIASES: dict[str, str] = {
+            "ROLE_USER":  "user",
+            "ROLE_AGENT": "agent",
+        }
+        body_dirty = False
+
+        if isinstance(parsed, dict) and parsed.get("method") in _METHOD_ALIASES:
+            original_method = parsed["method"]
+            parsed["method"] = _METHOD_ALIASES[original_method]
+            body_dirty = True
+            logger.info(
+                "jsonrpc_method_rewritten original=%s rewritten=%s",
+                original_method, parsed["method"],
+            )
+
+        # Normalise proto-style role values in every message in the payload.
+        # Prompt Opinion sends ROLE_USER / ROLE_AGENT; the a2a-sdk expects user / agent.
+        def _fix_roles(node):
+            if isinstance(node, dict):
+                if "role" in node and node["role"] in _ROLE_ALIASES:
+                    node["role"] = _ROLE_ALIASES[node["role"]]
+                for v in node.values():
+                    _fix_roles(v)
+            elif isinstance(node, list):
+                for item in node:
+                    _fix_roles(item)
+
+        if isinstance(parsed, dict):
+            before = json.dumps(parsed, sort_keys=True)
+            _fix_roles(parsed)
+            if json.dumps(parsed, sort_keys=True) != before:
+                body_dirty = True
+                logger.info("jsonrpc_roles_normalised")
+
+        if body_dirty:
+            body_bytes = json.dumps(parsed, ensure_ascii=False).encode("utf-8")
+            request._body = body_bytes  # type: ignore[attr-defined]
+
+        # Always log the JSON-RPC method so -32601 errors are immediately traceable.
+        jsonrpc_method = parsed.get("method") if isinstance(parsed, dict) else None
+        jsonrpc_id     = parsed.get("id")     if isinstance(parsed, dict) else None
+        if jsonrpc_method:
+            logger.info(
+                "jsonrpc_request id=%s method=%s path=%s",
+                jsonrpc_id, jsonrpc_method, request.url.path,
+            )
+        elif body_text:
+            logger.warning(
+                "jsonrpc_no_method_field path=%s body_preview=%s",
+                request.url.path, body_text[:200],
+            )
 
         if LOG_FULL_PAYLOAD:
             logger.info(
                 "incoming_http_request path=%s method=%s headers=%s\npayload=\n%s",
                 request.url.path, request.method,
                 safe_pretty_json(redact_headers(dict(request.headers))),
-                pretty_body,
+                safe_pretty_json(parsed) if parsed else body_text,
             )
 
         # Bridge FHIR metadata from message.metadata → params.metadata so that
@@ -138,4 +199,85 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             "security_authorized path=%s method=%s key_prefix=%s",
             request.url.path, request.method, api_key[:6],
         )
-        return await call_next(request)
+        response = await call_next(request)
+
+        # Only post-process JSON responses (not SSE streams).
+        content_type = response.headers.get("content-type", "")
+        if "application/json" in content_type:
+            resp_body = b""
+            async for chunk in response.body_iterator:
+                resp_body += chunk if isinstance(chunk, bytes) else chunk.encode()
+            try:
+                resp_parsed = json.loads(resp_body)
+
+                # Re-shape the JSON-RPC response into the PO a2a+json envelope:
+                #   {"task": { id, contextId, status, artifacts }}
+                # Differences from what a2a-sdk returns:
+                #   - No jsonrpc/id wrapper — just {"task": {...}}
+                #   - status.state uses proto enum   e.g. "TASK_STATE_COMPLETED"
+                #   - artifact parts have no "kind" field — just {"text": "..."}
+                #   - Content-Type: application/a2a+json
+                _STATE_MAP = {
+                    "completed":      "TASK_STATE_COMPLETED",
+                    "working":        "TASK_STATE_WORKING",
+                    "submitted":      "TASK_STATE_SUBMITTED",
+                    "input-required": "TASK_STATE_INPUT_REQUIRED",
+                    "failed":         "TASK_STATE_FAILED",
+                    "canceled":       "TASK_STATE_CANCELED",
+                }
+                result = resp_parsed.get("result") if isinstance(resp_parsed, dict) else None
+                if isinstance(result, dict) and result.get("kind") == "task":
+                    # Build clean task object
+                    task: dict = {
+                        "id":        result.get("id"),
+                        "contextId": result.get("contextId"),
+                    }
+
+                    # Status — map state to proto enum
+                    status = result.get("status", {})
+                    raw_state = status.get("state", "")
+                    task["status"] = {"state": _STATE_MAP.get(raw_state, raw_state.upper())}
+
+                    # Artifacts — strip "kind" from each part
+                    clean_artifacts = []
+                    for artifact in result.get("artifacts", []):
+                        clean_parts = []
+                        for part in artifact.get("parts", []):
+                            clean_part = {k: v for k, v in part.items() if k != "kind"}
+                            clean_parts.append(clean_part)
+                        clean_artifact = {k: v for k, v in artifact.items() if k != "parts"}
+                        clean_artifact["parts"] = clean_parts
+                        clean_artifacts.append(clean_artifact)
+                    task["artifacts"] = clean_artifacts
+
+                    # Keep JSON-RPC envelope; nest task under "task" key in result
+                    resp_parsed["result"] = {"task": task}
+                    logger.info("response_reshaped_to_po_a2a_json task_id=%s state=%s",
+                                task.get("id"), task["status"]["state"])
+
+                resp_body = json.dumps(resp_parsed, ensure_ascii=False).encode("utf-8")
+
+                if LOG_FULL_PAYLOAD:
+                    logger.info(
+                        "outgoing_response status=%s content_type=%s\nbody=\n%s",
+                        response.status_code, content_type,
+                        safe_pretty_json(resp_parsed),
+                    )
+            except Exception:
+                logger.warning(
+                    "outgoing_response_parse_failed status=%s body_raw=%s",
+                    response.status_code, resp_body[:500],
+                )
+
+            from starlette.responses import Response as StarletteResponse
+            headers = dict(response.headers)
+            headers["content-length"] = str(len(resp_body))
+            # PO expects application/a2a+json, not application/json
+            return StarletteResponse(
+                content=resp_body,
+                status_code=response.status_code,
+                headers=headers,
+                media_type=response.media_type,
+            )
+
+        return response
