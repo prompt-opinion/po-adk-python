@@ -144,6 +144,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         # Bridge FHIR metadata from message.metadata → params.metadata so that
         # the ADK before_model_callback (fhir_hook.extract_fhir_context) can
         # find it regardless of where the caller placed it.
+      
+        logger.info(f"parsed: {parsed}")
         fhir_key, fhir_data = extract_fhir_from_payload(parsed)
         if isinstance(parsed, dict):
             params = parsed.get("params")
