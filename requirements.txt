@@ -1,12 +1,16 @@
 # Core ADK framework + A2A server
 google-adk>=1.25.0
-a2a-sdk[http-server]>=0.3.0
+a2a-sdk[http-server]>=0.3.26,<1.0.0
 
 # HTTP client used by FHIR tools
 httpx>=0.28.0
 
 # Environment variable loading
 python-dotenv>=1.0.0
+
+# LiteLLM — enables non-Gemini models (OpenAI, Anthropic, etc.)
+# Only needed if you set *_MODEL env vars to non-Gemini models
+litellm>=1.0.0,!=1.82.7,!=1.82.8
 
 # ASGI server
 uvicorn>=0.41.0

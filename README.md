@@ -423,6 +423,13 @@ Copy `.env.example` to `.env` and set values before starting any server.
 | `API_KEYS` | No | — | Comma-separated list of valid `X-API-Key` values for authenticated agents, e.g. `key1,key2` |
 | `API_KEY_PRIMARY` | No | — | First named API key slot for authenticated agents |
 | `API_KEY_SECONDARY` | No | — | Second named API key slot for authenticated agents |
+| `GENERAL_AGENT_MODEL` | No | `gemini-2.5-flash` | Model for `general_agent`. Use any LiteLLM-supported model string (e.g. `openai/gpt-4o-mini`, `anthropic/claude-3-5-sonnet-20241022`). |
+| `HEALTHCARE_AGENT_MODEL` | No | `gemini-2.5-flash` | Model for `healthcare_agent`. Same format as `GENERAL_AGENT_MODEL`. |
+| `ORCHESTRATOR_MODEL` | No | `gemini-2.5-flash` | Model for `orchestrator`. Same format as `GENERAL_AGENT_MODEL`. |
+| `OPENAI_API_KEY` | No | — | Required when any `*_MODEL` is set to an `openai/` model. |
+| `ANTHROPIC_API_KEY` | No | — | Required when any `*_MODEL` is set to an `anthropic/` model. |
+| `GOOGLE_GENAI_USE_VERTEXAI` | No | `FALSE` | Set to `TRUE` to use Vertex AI instead of AI Studio. Vertex AI is billed from the first call — leave `FALSE` to stay on the free AI Studio quota. |
+| `BASE_URL` | No | — | If all agents run behind a single tunnel (e.g. ngrok), set this to override all three agent URLs at once. Individual `*_URL` vars take precedence if set. |
 | `PO_PLATFORM_BASE_URL` | No | `http://localhost:5139` | Base URL of your Prompt Opinion workspace. Used to construct the FHIR extension URI in the agent card for `healthcare_agent` and `orchestrator`. Set this to your actual workspace URL (e.g. `https://your-workspace.promptopinion.ai`). |
 | `LOG_FULL_PAYLOAD` | No | `true` | Log full JSON-RPC request body on each request |
 | `LOG_HOOK_RAW_OBJECTS` | No | `false` | Dump raw ADK callback objects — debug only |
@@ -617,12 +624,28 @@ docker compose up general
 # Build the image once
 docker build -t adk-agents .
 
-# Start the general_agent on port 8002
+# Start the general_agent on port 8002 with Gemini (default)
 docker run --rm -p 8002:8002 \
   -e AGENT_MODULE=general_agent.app:a2a_app \
   -e PORT=8002 \
   -e GOOGLE_API_KEY=your-key-here \
   -e GOOGLE_GENAI_USE_VERTEXAI=FALSE \
+  adk-agents
+
+# Or with OpenAI
+docker run --rm -p 8002:8002 \
+  -e AGENT_MODULE=general_agent.app:a2a_app \
+  -e PORT=8002 \
+  -e GENERAL_AGENT_MODEL=openai/gpt-4o-mini \
+  -e OPENAI_API_KEY=your-openai-key-here \
+  adk-agents
+
+# Or with Anthropic Claude
+docker run --rm -p 8002:8002 \
+  -e AGENT_MODULE=general_agent.app:a2a_app \
+  -e PORT=8002 \
+  -e GENERAL_AGENT_MODEL=anthropic/claude-3-5-sonnet-20241022 \
+  -e ANTHROPIC_API_KEY=your-anthropic-key-here \
   adk-agents
 ```
 
@@ -734,6 +757,25 @@ Service URL: https://orchestrator-abc123-uc.a.run.app
 ```
 
 > **Note on `--allow-unauthenticated`:** This disables Cloud Run's IAM layer so requests can reach the agent without a Google identity. Application-level security (the `X-API-Key` header) is still enforced by `ApiKeyMiddleware` for the agents that require it. The `general_agent` is intentionally open.
+
+**Using OpenAI or Anthropic instead of Gemini?** Store the provider key in Secret Manager and pass the model via `--set-env-vars`. Example for `healthcare_agent` on GPT-4o-mini:
+
+```bash
+# Store the key once
+echo -n "your-openai-key-here" | gcloud secrets create openai-api-key --data-file=-
+
+# Deploy with OpenAI
+gcloud run deploy healthcare-agent \
+  --source . \
+  --region us-central1 \
+  --set-env-vars "AGENT_MODULE=healthcare_agent.app:a2a_app,HEALTHCARE_AGENT_MODEL=openai/gpt-4o-mini" \
+  --set-secrets "OPENAI_API_KEY=openai-api-key:latest" \
+  --allow-unauthenticated \
+  --min-instances 0 \
+  --max-instances 3
+```
+
+Replace `OPENAI_API_KEY` / `openai/gpt-4o-mini` with `ANTHROPIC_API_KEY` / `anthropic/claude-3-5-sonnet-20241022` for Claude. Each agent has its own model var (`GENERAL_AGENT_MODEL`, `HEALTHCARE_AGENT_MODEL`, `ORCHESTRATOR_MODEL`) so you can mix providers across services.
 
 ---
 

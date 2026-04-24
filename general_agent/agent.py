@@ -11,13 +11,29 @@ To customise:
   • If you later need FHIR access, import extract_fhir_context from shared.fhir_hook
     and add it as before_model_callback, then import FHIR tools from shared.tools.
 """
+import os
+
 from google.adk.agents import Agent
+from google.adk.models.lite_llm import LiteLlm
 
 from .tools import get_current_datetime, look_up_icd10
 
+# ── Model selection ────────────────────────────────────────────────────────────
+# Set GENERAL_AGENT_MODEL in your .env to switch models.
+#
+# Native Gemini (default — no extra dependencies):
+#   GENERAL_AGENT_MODEL=gemini-2.5-flash
+#
+# Any LiteLLM-supported model (requires OPENAI_API_KEY / ANTHROPIC_API_KEY etc.):
+#   GENERAL_AGENT_MODEL=openai/gpt-4o
+#   GENERAL_AGENT_MODEL=anthropic/claude-3-5-sonnet-20241022
+# ──────────────────────────────────────────────────────────────────────────────
+_model_name = os.getenv("GENERAL_AGENT_MODEL", "gemini-2.5-flash")
+_model = _model_name if _model_name.startswith("gemini") else LiteLlm(model=_model_name)
+
 root_agent = Agent(
     name="general_agent",
-    model="gemini-2.5-flash",
+    model=_model,
     description=(
         "A general-purpose clinical assistant for date/time queries "
         "and ICD-10-CM code lookups. Does not require patient context."

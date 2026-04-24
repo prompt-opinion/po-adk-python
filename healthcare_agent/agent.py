@@ -12,7 +12,10 @@ To customise:
   • Add new FHIR tools in shared/tools/fhir.py and export from shared/tools/__init__.py.
   • Add non-FHIR tools in shared/tools/ or locally in a tools/ folder here.
 """
+import os
+
 from google.adk.agents import Agent
+from google.adk.models.lite_llm import LiteLlm
 
 from shared.fhir_hook import extract_fhir_context
 from shared.tools import (
@@ -22,9 +25,22 @@ from shared.tools import (
     get_recent_observations,
 )
 
+# ── Model selection ────────────────────────────────────────────────────────────
+# Set HEALTHCARE_AGENT_MODEL in your .env to switch models.
+#
+# Native Gemini (default — no extra dependencies):
+#   HEALTHCARE_AGENT_MODEL=gemini-2.5-flash
+#
+# Any LiteLLM-supported model (requires OPENAI_API_KEY / ANTHROPIC_API_KEY etc.):
+#   HEALTHCARE_AGENT_MODEL=openai/gpt-4o
+#   HEALTHCARE_AGENT_MODEL=anthropic/claude-3-5-sonnet-20241022
+# ──────────────────────────────────────────────────────────────────────────────
+_model_name = os.getenv("HEALTHCARE_AGENT_MODEL", "gemini-2.5-flash")
+_model = _model_name if _model_name.startswith("gemini") else LiteLlm(model=_model_name)
+
 root_agent = Agent(
     name="healthcare_fhir_agent",
-    model="gemini-2.5-flash",
+    model=_model,
     description=(
         "A clinical assistant that queries a patient's FHIR health record "
         "to answer questions about demographics, medications, conditions, and observations."
