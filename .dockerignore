@@ -5,6 +5,7 @@
 
 # Secret — must never be baked into an image
 .env
+.env.example
 
 # ADK local state
 .adk/
